@@ -181,11 +181,17 @@ const (
 
 func prepareVerticies(shader uint32) {
 
-	// Opaque VAO
-	gl.GenVertexArrays(int32(numVertexArrays), &vertexArrays[0])
-	gl.BindVertexArray(vertexArrays[triangles])
+	//              |
+	//              |
+	//              |
+	// +-------------------------+
+	// |                         |
+	// |   Create the Vertices   |
+	// |                         |
+	// +------------|------------+
+	//              |
+	//              |
 
-	// Vertices
 	var vertices = [6][2]float32{
 		{-0.90, -0.90}, // Triangle 1
 		{0.85, -0.90},
@@ -194,6 +200,21 @@ func prepareVerticies(shader uint32) {
 		{0.90, 0.90},
 		{-0.85, 0.90},
 	}
+
+	//              |
+	//              |
+	//              |
+	// +-------------------------+
+	// |                         |
+	// |   Create a VAO          |
+	// |                         |
+	// +------------|------------+
+	//              |
+	//              |
+	// Give me one VAO called vaoOne
+	var vao1 uint32
+	gl.GenVertexArrays(1, &vao1)
+	gl.BindVertexArray(vao1)
 
 	// Copy vertices to the GPU
 	gl.GenBuffers(int32(numBuffers), &buffers[0])
@@ -207,19 +228,17 @@ func prepareVerticies(shader uint32) {
 
 func main() {
 
+	// Create a windows and GL context
 	win := getWindowFromGLFW("Hello GoPenGLSLang")
 
-	prepareVerticies()
-
-	//gl.ClearColor(0, 0.5, 1.0, 1.0)
-
-	// Configure the vertex and fragment shaders
+	// Create shader
 	shader, err := newProgram(vertexShader, fragmentShader)
 	if err != nil {
 		panic(err)
 	}
 	defer gl.DeleteProgram(shader)
 
+	// Send vertices to GPU
 	prepareVerticies(shader)
 
 	var vertexArray uint32
