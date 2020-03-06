@@ -182,12 +182,30 @@ func main() {
 	//              |
 	// +-------------------------+
 	// |                         |
-	// | Perspective Projection  |
+	// |  Describe camera lens   |
 	// |                         |
 	// +-------------------------+
 	//              |
 
-	projection := mgl32.Perspective(mgl32.DegToRad(45.0), float32(windowWidth)/float32(windowHeight), 0.1, 10.0)
+	// Field of View (along the Y axis)
+	fovy := mgl32.DegToRad(45.0)
+	// The aspect ratio
+	aspectRatio := float32(windowWidth) / float32(windowHeight)
+	// The near and far clipping distances
+	var nearClip float32 = 0.1
+	var farClip float32 = 10
+	// Perspective generates a Perspective Matrix.
+	projection := mgl32.Perspective(fovy, aspectRatio, nearClip, farClip)
+
+	//              |
+	// +-------------------------+
+	// |                         |
+	// | Link "projection" with  |
+	// | the shader              |
+	// |                         |
+	// +-------------------------+
+	//              |
+
 	projectionUniform := gl.GetUniformLocation(shader, gl.Str("projection\x00"))
 	gl.UniformMatrix4fv(projectionUniform, 1, false, &projection[0])
 
@@ -199,11 +217,25 @@ func main() {
 	// +-------------------------+
 	//              |
 
+	// This is where the camera is positioned
 	eye := mgl32.Vec3{3, 3, 3}
+	// This is the point at which the camera is looking
 	lookingAt := mgl32.Vec3{0, 0, 0}
+	// Up is in the positive Y direction
 	thisWayIsUp := mgl32.Vec3{0, 1, 0}
+	// LookAtV positions the camera based on these 3 things
 	camera := mgl32.LookAtV(eye, lookingAt, thisWayIsUp)
 	// glGetUniformLocation gets the location of a uniform within a program
+
+	//              |
+	// +-------------------------+
+	// |                         |
+	// | Link "camera" with      |
+	// | the shader              |
+	// |                         |
+	// +-------------------------+
+	//              |
+
 	cameraUniform := gl.GetUniformLocation(shader, gl.Str("camera\x00"))
 	gl.UniformMatrix4fv(cameraUniform, 1, false, &camera[0])
 
