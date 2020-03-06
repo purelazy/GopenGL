@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"runtime"
 	"strings"
@@ -130,7 +131,7 @@ func main() {
 	// +-------------------------+
 	// |                         |
 	// |   Create the Shader     |
-	// |  (Compile & Link GLSL)  |
+	// |   (Compile & Link)      |
 	// |                         |
 	// +-------------------------+
 	//              |
@@ -227,10 +228,12 @@ func main() {
 	// +-------------------------+
 	//              |
 
-	const numberOfVertices int32 = 6
-	// The number of components per vertex attribute, X and Y
-	const coordinatesPerVertex int32 = 2
-	var vertices = [numberOfVertices][coordinatesPerVertex]float32{
+	type vec2 struct {
+		x float32
+		y float32
+	}
+
+	var vertices = [...]vec2{
 		// Triangle 1
 		{-0.90, -0.90},
 		{0.85, -0.90},
@@ -309,7 +312,7 @@ func main() {
 	//              |
 
 	var vPosition uint32 = 0
-	// Size specifies the number of components per generic vertex attribute.
+	coordinatesPerVertex := int32(unsafe.Sizeof(vec2{})) / int32(unsafe.Sizeof(float32(0)))
 	gl.VertexAttribPointer(vPosition, coordinatesPerVertex, gl.FLOAT, false, 0, gl.PtrOffset(0))
 
 	//              |
@@ -332,13 +335,30 @@ func main() {
 	//              |
 
 	// A structure for colour data
-	type vec4 struct {
+	type colour4 struct {
 		r float32
 		g float32
 		b float32
 		a float32
 	}
-	black := vec4{0, 0, 0, 1}
+	black := colour4{0, 0, 0, 1}
+
+	//              |
+	// +-------------------------+
+	// |                         |
+	// | Let's rotate the model  |
+	// | by omega (in radians)   |
+	// |                         |
+	// +-------------------------+
+	//              |
+
+	// Start at angle 0
+	angle := 0.0
+	// Rotate at one revolution (2 * Pi radians) per second
+	omega := 2 * math.Pi
+	// GetTime returns the time elapsed since GLFW was started
+	// previousTime is used to calculate the time interval (dt) between frames
+	previousTime := glfw.GetTime()
 
 	//              |
 	// +-------------------------+
@@ -365,6 +385,25 @@ func main() {
 		//              |
 		// +-------------------------+
 		// |                         |
+		// | dt: time between frames |
+		// |                         |
+		// +-------------------------+
+		//              |
+
+		// Update
+		time := glfw.GetTime()
+		dt := time - previousTime
+		previousTime = time
+
+		angle += omega * dt
+
+		model = mgl32.HomogRotate3D(float32(angle), mgl32.Vec3{0, 1, 0})
+
+		gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
+
+		//              |
+		// +-------------------------+
+		// |                         |
 		// |  Draw the vertices as   |
 		// |  triangles              |
 		// |                         |
@@ -373,9 +412,7 @@ func main() {
 
 		// Specifie the first index in the enabled array.
 		const first int32 = 0
-		gl.DrawArrays(gl.TRIANGLES, first, numberOfVertices)
-		// gl.PointSize(10)
-		// gl.DrawArrays(gl.POINTS, first, numberOfVertices)
+		gl.DrawArrays(gl.TRIANGLES, first, int32(len(vertices)))
 
 		//              |
 		// +-------------------------+
@@ -395,11 +432,13 @@ func main() {
 		//              |
 		// +-------------------------+
 		// |                         |
-		// | See what's going on     |
+		// | Poll mouse and keyboard |
 		// |                         |
 		// +-------------------------+
 		//              |
 
+		// Without this, clicking the close window button would not be detected
+		// and you would need to use "Control-C" to stop the program.
 		glfw.PollEvents()
 	}
 }
