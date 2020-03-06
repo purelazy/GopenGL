@@ -2,22 +2,22 @@ package main
 
 import (
 	"fmt"
-
-	// "os"
+	"os"
 	"runtime"
 	"strings"
 	"unsafe"
 
 	"github.com/go-gl/gl/v4.6-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/go-gl/mathgl/mgl32"
 )
 
-const (
-	windowWidth  = 960
-	windowHeight = 540
-)
-
-func getWindowFromGLFW(title string) *glfw.Window {
+func createWindow(title string, width, height int) *glfw.Window {
+	fmt.Println("Window width, height: ", width, height)
+	if !(width != 0 && height != 0) {
+		fmt.Println("Width and Height cannot be zero.")
+		os.Exit(0)
+	}
 	runtime.LockOSThread()
 
 	if err := glfw.Init(); err != nil {
@@ -30,7 +30,8 @@ func getWindowFromGLFW(title string) *glfw.Window {
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
 
-	win, err := glfw.CreateWindow(800, 600, title, nil, nil)
+	// Create a window
+	win, err := glfw.CreateWindow(width, height, title, nil, nil)
 
 	if err != nil {
 		panic(fmt.Errorf("could not create opengl renderer: %v", err))
@@ -42,37 +43,8 @@ func getWindowFromGLFW(title string) *glfw.Window {
 		panic(err)
 	}
 
-	// version := gl.GoStr(gl.GetString(gl.VERSION))
-	// fmt.Println("OpenGL version", version)
-
 	return win
 }
-
-type vec3 [3]float32
-type vec4 [4]float32
-
-const drawBuffer int32 = 0
-
-var vertexShader = `
-#version 430 core
-
-layout (location = 0) in vec4 vPosition;
-
-void main()
-{
-	gl_Position = vPosition;
-}
-` + "\x00"
-
-var fragmentShader = `
-#version 430 core
-
-out vec4 color;
-
-void main() {
-    color = vec4(0.0, 0.8, 1.0, 1.0);
-}
-` + "\x00"
 
 func compileShader(source string, shaderType uint32) (uint32, error) {
 	shader := gl.CreateShader(shaderType)
@@ -102,16 +74,18 @@ func compileShader(source string, shaderType uint32) (uint32, error) {
 	return shader, nil
 }
 
-func newProgram(vertexShaderSource, fragmentShaderSource string) (uint32, error) {
+func createShader(vertexShaderSource, fragmentShaderSource string) (uint32, error) {
 	vertexShader, err := compileShader(vertexShaderSource, gl.VERTEX_SHADER)
 	if err != nil {
-		fmt.Println("Vertex Compile Error")
+		fmt.Println("Vertex shader did not compile")
 		fmt.Println(err)
 		return 0, err
 	}
 
 	fragmentShader, err := compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER)
 	if err != nil {
+		fmt.Println("Fragment shader did not compile")
+		fmt.Println(err)
 		return 0, err
 	}
 
@@ -139,95 +113,177 @@ func newProgram(vertexShaderSource, fragmentShaderSource string) (uint32, error)
 	return program, nil
 }
 
-// Attribute IDs
-type attributeID int
-
-const (
-	vPosition attributeID = 0
-)
-
 func main() {
 
-	//              |
 	//              |
 	// +-------------------------+
 	// |                         |
 	// |   Create a Window       |
 	// |                         |
-	// +------------|------------+
+	// +-------------------------+
 	//              |
 
-	win := getWindowFromGLFW("Hello GoPenGLSLang")
+	var windowWidth, windowHeight int = 800, 600
+	win := createWindow("Hello OpenGL in Go", windowWidth, windowHeight)
 
-	//              |
 	//              |
 	// +-------------------------+
 	// |                         |
 	// |   Create the Shader     |
+	// |  (Compile & Link GLSL)  |
 	// |                         |
-	// +------------|------------+
+	// +-------------------------+
 	//              |
 
-	shader, err := newProgram(vertexShader, fragmentShader)
+	var vertexShader = `
+		#version 430
+
+		uniform mat4 projection;
+		uniform mat4 camera;
+		uniform mat4 model;
+		
+		in vec3 vert;
+		
+		void main() {
+			gl_Position = projection * camera * model * vec4(vert, 1);
+		}
+
+` + "\x00"
+
+	var fragmentShader = `
+		#version 430
+
+		out vec4 outputColor;
+
+		void main() {
+			// This pixel is green
+			outputColor = vec4(0.0, 1.0, 0.0, 1.0);
+		}
+
+	` + "\x00"
+
+	shader, err := createShader(vertexShader, fragmentShader)
 	if err != nil {
 		panic(err)
 	}
 	defer gl.DeleteProgram(shader)
 
 	//              |
-	//              |
 	// +-------------------------+
 	// |                         |
-	// |   Load the Shader       |
+	// |    Load the Shader      |
 	// |                         |
-	// +------------|------------+
+	// +-------------------------+
 	//              |
 
 	gl.UseProgram(shader)
 
 	//              |
+	// +-------------------------+
+	// |                         |
+	// | Perspective Projection  |
+	// |                         |
+	// +-------------------------+
+	//              |
+
+	projection := mgl32.Perspective(mgl32.DegToRad(45.0), float32(windowWidth)/float32(windowHeight), 0.1, 10.0)
+	projectionUniform := gl.GetUniformLocation(shader, gl.Str("projection\x00"))
+	gl.UniformMatrix4fv(projectionUniform, 1, false, &projection[0])
+
 	//              |
 	// +-------------------------+
 	// |                         |
-	// |   Create the Vertices   |
+	// |   Position the Camera   |
 	// |                         |
-	// +------------|------------+
+	// +-------------------------+
 	//              |
 
-	var vertices = [6][2]float32{
-		{-0.90, -0.90}, // Triangle 1
+	eye := mgl32.Vec3{3, 3, 3}
+	lookingAt := mgl32.Vec3{0, 0, 0}
+	thisWayIsUp := mgl32.Vec3{0, 1, 0}
+	camera := mgl32.LookAtV(eye, lookingAt, thisWayIsUp)
+	// glGetUniformLocation gets the location of a uniform within a program
+	cameraUniform := gl.GetUniformLocation(shader, gl.Str("camera\x00"))
+	gl.UniformMatrix4fv(cameraUniform, 1, false, &camera[0])
+
+	//              |
+	// +-------------------------+
+	// |                         |
+	// |          Model          |
+	// |                         |
+	// +-------------------------+
+	//              |
+
+	model := mgl32.Ident4()
+	modelUniform := gl.GetUniformLocation(shader, gl.Str("model\x00"))
+	gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
+
+	//              |
+	// +-------------------------+
+	// |                         |
+	// |   Define 2 Triangles    |
+	// |   Requires 6 Vertices   |
+	// |                         |
+	// +-------------------------+
+	//              |
+
+	const numberOfVertices int32 = 6
+	// The number of components per vertex attribute, X and Y
+	const coordinatesPerVertex int32 = 2
+	var vertices = [numberOfVertices][coordinatesPerVertex]float32{
+		// Triangle 1
+		{-0.90, -0.90},
 		{0.85, -0.90},
 		{-0.90, 0.85},
-		{0.90, -0.85}, // Triangle 2
+		// Triangle 2
+		{0.90, -0.85},
 		{0.90, 0.90},
 		{-0.85, 0.90},
 	}
 
 	//              |
-	//              |
 	// +-------------------------+
 	// |                         |
 	// |  Create one VAO         |
 	// |                         |
-	// +------------|------------+
+	// +-------------------------+
 	//              |
 
-	var one int32 = 1
+	var oneVAO int32 = 1
 	var theVAO uint32
-	gl.GenVertexArrays(one, &theVAO)
+
+	// GenVertexArrays(GLsizei n, GLuint *arrays);
+	// Copies "n" currently unused names (for use as vertex-array objects)
+	// to "arrays". The names returned are marked as "used" for the purposes
+	// of allocating additional buffer objects, and initialized with values
+	// representing the default state of the collection of uninitialized vertex
+	// arrays.
+
+	gl.GenVertexArrays(oneVAO, &theVAO)
+
+	// glBindVertexArray() does three things. When using the value array that
+	// is other than zero and was returned from glGenVertexArrays(), a new
+	// vertex-array object is created and assigned that name. When binding to a
+	// previously created vertex-array object, that vertex array object becomes
+	// active, which additionally affects the vertex array state stored in the
+	// object. When binding to an array value of zero, OpenGL stops using
+	// application-allocated vertex-array objects and returns to the default state
+	// for vertex arrays.
+
 	gl.BindVertexArray(theVAO)
 
-	//              |
 	//              |
 	// +-------------------------+
 	// |                         |
 	// |  Create one Buffer      |
 	// |                         |
-	// +------------|------------+
+	// +-------------------------+
 	//              |
 
+	var oneBuffer int32 = 1
 	var theArrayBuffer uint32
-	gl.GenBuffers(one, &theArrayBuffer)
+
+	gl.GenBuffers(oneBuffer, &theArrayBuffer)
 	gl.BindBuffer(gl.ARRAY_BUFFER, theArrayBuffer)
 
 	//              |
@@ -249,71 +305,78 @@ func main() {
 	// | the vertex data. Size,  |
 	// | type, stride, etc       |
 	// |                         |
-	// +------------|------------+
+	// +-------------------------+
 	//              |
 
 	var vPosition uint32 = 0
-	gl.VertexAttribPointer(vPosition, 2, gl.FLOAT, false, 0, gl.PtrOffset(0))
+	// Size specifies the number of components per generic vertex attribute.
+	gl.VertexAttribPointer(vPosition, coordinatesPerVertex, gl.FLOAT, false, 0, gl.PtrOffset(0))
 
-	//              |
 	//              |
 	// +-------------------------+
 	// |                         |
 	// | Use vPosition in Shader |
 	// |                         |
-	// +------------|------------+
+	// +-------------------------+
 	//              |
 
 	gl.EnableVertexAttribArray(vPosition)
 
 	//              |
-	//              |
 	// +-------------------------+
 	// |                         |
-	// | Define "black"          |
+	// | Define a "Clear" colour |
+	// | Black in this case      |
 	// |                         |
-	// +------------|------------+
+	// +-------------------------+
 	//              |
 
+	// A structure for colour data
+	type vec4 struct {
+		r float32
+		g float32
+		b float32
+		a float32
+	}
 	black := vec4{0, 0, 0, 1}
 
-	//              |
 	//              |
 	// +-------------------------+
 	// |                         |
 	// | Loop until the window   |
 	// | is closed               |
 	// |                         |
-	// +------------|------------+
+	// +-------------------------+
 	//              |
 
 	for !win.ShouldClose() {
-		// t0 := time.Now()
 
-		//              |
 		//              |
 		// +-------------------------+
 		// |                         |
-		// |    Clear the screen     |
+		// |     Clear buffer 0      |
 		// |                         |
-		// +------------|------------+
+		// +-------------------------+
 		//              |
 
-		gl.ClearBufferfv(gl.COLOR, drawBuffer, &black[0])
+		const drawbuffer int32 = 0
+		gl.ClearBufferfv(gl.COLOR, drawbuffer, &black.r)
 
-		//              |
 		//              |
 		// +-------------------------+
 		// |                         |
 		// |  Draw the vertices as   |
 		// |  triangles              |
 		// |                         |
-		// +------------|------------+
+		// +-------------------------+
 		//              |
 
-		gl.DrawArrays(gl.TRIANGLES, 0, 6)
+		// Specifie the first index in the enabled array.
+		const first int32 = 0
+		gl.DrawArrays(gl.TRIANGLES, first, numberOfVertices)
+		// gl.PointSize(10)
+		// gl.DrawArrays(gl.POINTS, first, numberOfVertices)
 
-		//              |
 		//              |
 		// +-------------------------+
 		// |                         |
@@ -324,18 +387,17 @@ func main() {
 		// |  back buffers of the    |
 		// |  window                 |
 		// |                         |
-		// +------------|------------+
+		// +-------------------------+
 		//              |
 
 		win.SwapBuffers()
 
 		//              |
-		//              |
 		// +-------------------------+
 		// |                         |
 		// | See what's going on     |
 		// |                         |
-		// +------------|------------+
+		// +-------------------------+
 		//              |
 
 		glfw.PollEvents()
