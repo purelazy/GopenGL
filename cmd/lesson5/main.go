@@ -2,9 +2,6 @@ package main
 
 import (
 	"fmt"
-	"image"
-	"image/draw"
-	_ "image/png"
 	"math"
 	"math/rand"
 	"os"
@@ -80,18 +77,11 @@ func compileShader(source string, shaderType uint32) (uint32, error) {
 	return shader, nil
 }
 
-func createShader(vertexShaderSource, gss, fragmentShaderSource string) (uint32, error) {
+func createShader(vertexShaderSource, fragmentShaderSource string) (uint32, error) {
 	//func createShader(vertexShaderSource, fragmentShaderSource string) (uint32, error) {
 	vertexShader, err := compileShader(vertexShaderSource, gl.VERTEX_SHADER)
 	if err != nil {
 		fmt.Println("Vertex shader did not compile")
-		fmt.Println(err)
-		return 0, err
-	}
-
-	gs, err := compileShader(gss, gl.GEOMETRY_SHADER)
-	if err != nil {
-		fmt.Println("Geometry shader did not compile")
 		fmt.Println(err)
 		return 0, err
 	}
@@ -106,7 +96,6 @@ func createShader(vertexShaderSource, gss, fragmentShaderSource string) (uint32,
 	program := gl.CreateProgram()
 
 	gl.AttachShader(program, vertexShader)
-	gl.AttachShader(program, gs)
 	gl.AttachShader(program, fragmentShader)
 	gl.LinkProgram(program)
 
@@ -123,48 +112,9 @@ func createShader(vertexShaderSource, gss, fragmentShaderSource string) (uint32,
 	}
 
 	gl.DeleteShader(vertexShader)
-	gl.DeleteShader(gs)
 	gl.DeleteShader(fragmentShader)
 
 	return program, nil
-}
-
-func newTexture(file string) (uint32, error) {
-	imgFile, err := os.Open(file)
-	if err != nil {
-		return 0, fmt.Errorf("texture %q not found on disk: %v", file, err)
-	}
-	img, _, err := image.Decode(imgFile)
-	if err != nil {
-		return 0, err
-	}
-
-	rgba := image.NewRGBA(img.Bounds())
-	if rgba.Stride != rgba.Rect.Size().X*4 {
-		return 0, fmt.Errorf("unsupported stride")
-	}
-	draw.Draw(rgba, rgba.Bounds(), img, image.Point{0, 0}, draw.Src)
-
-	var texture uint32
-	gl.GenTextures(1, &texture)
-	gl.ActiveTexture(gl.TEXTURE0)
-	gl.BindTexture(gl.TEXTURE_2D, texture)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-	gl.TexImage2D(
-		gl.TEXTURE_2D,
-		0,
-		gl.RGBA,
-		int32(rgba.Rect.Size().X),
-		int32(rgba.Rect.Size().Y),
-		0,
-		gl.RGBA,
-		gl.UNSIGNED_BYTE,
-		gl.Ptr(rgba.Pix))
-
-	return texture, nil
 }
 
 func main() {
@@ -205,54 +155,27 @@ func main() {
 		vec3 doNotDraw = vec3(1000.0, 0.0, 0.0);
 		
 		void main() {
-			if (length(vert) < 1) {
+
 				gl_Position = projection * camera * model * vec4(vert, 1);
-				if (length(vert) < 0.7) gl_Position = vec4(doNotDraw, 1);
-				colour = vec3((-gl_Position.z+1.0)/2.0, 0.0, 0.0);
-			}
-			else {
-				//colour = vec3(0.0, 0.0, 0.9);
-				gl_Position = vec4(doNotDraw, 1);
-			}
+				// z range is [-1,1]
+				colour = vec3((-gl_Position.z+1.0)/4.0, abs(model[0][0]/4.0), model[0][0]);
+
 
 		}
 ` + "\x00"
 
-	var geometryShader = `
-		#version 430 core
-		layout (points) in;
-		layout (line_strip, max_vertices = 2) out;
-		//layout (points, max_vertices = 1) out;
-
-		in vec3 colour[];
-		out vec3 colourFS;
-
-		void main() {
-			gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
-			//gl_Position = gl_in[0].gl_Position;
-			colourFS = vec3(0.0,0.0,0.0);
-			EmitVertex();
-
-			gl_Position = gl_in[0].gl_Position;
-			colourFS = colour[0];
-			EmitVertex();
-
-			EndPrimitive();
-		}
-	` + "\x00"
-
 	var fragmentShader = `
 		#version 430 core
 
-		in vec3 colourFS;
+		in vec3 colour;
 		out vec4 outputColor;
 
 		void main() {
-			outputColor = vec4(colourFS, 1.0);
+			outputColor = vec4(colour, 1.0);
 		}
 	` + "\x00"
 
-	shader, err := createShader(vertexShader, geometryShader, fragmentShader)
+	shader, err := createShader(vertexShader, fragmentShader)
 	// shader, err := createShader(vertexShader, fragmentShader)
 	if err != nil {
 		panic(err)
@@ -402,12 +325,44 @@ func main() {
 		z float32
 	}
 
-	const count int = 2000
+	const count int = 20000
 	var samplePoints [count]vec3
 
-	for i := 0; i < count; i++ {
-		samplePoints[i] = vec3{rand.Float32()*2 - 1, rand.Float32()*2 - 1, rand.Float32()*2 - 1}
-	}
+	// pos := vec3{0, 0, 0}
+	// samplePoints[0] = pos
+	// move := vec3{}
+
+	// for i := 1; i < count; i++ {
+	// 	rnd := rand.Intn(6)
+	// 	switch rnd {
+	// 	case 0:
+	// 		move = vec3{-0.01, 0, 0}
+	// 	case 1:
+	// 		move = vec3{0.01, 0, 0}
+	// 	case 2:
+	// 		move = vec3{0, -0.01, 0}
+	// 	case 3:
+	// 		move = vec3{0, 0.01, 0}
+	// 	case 4:
+	// 		move = vec3{0, 0, -0.01}
+	// 	case 5:
+	// 		move = vec3{0, 0, 0.01}
+	// 	default:
+	// 		panic("unrecognized escape character")
+	// 	}
+	// 	//fmt.Println(move, start)
+	// 	pos.x += move.x
+	// 	pos.y += move.y
+	// 	pos.z += move.z
+	// 	samplePoints[i] = pos
+	// 	// if i%2000 == 0 {
+	// 	// 	pos = vec3{0, 0, 0}
+	// 	// 	samplePoints[i] = pos
+	// 	// } else {
+	// 	// 	samplePoints[i] = pos
+	// 	// }
+	// 	//samplePoints[i] = vec3{rand.Float32()*2 - 1, rand.Float32()*2 - 1, rand.Float32()*2 - 1}
+	// }
 
 	//              |
 	// +-------------------------+
@@ -448,44 +403,18 @@ func main() {
 	//              |
 	// +-------------------------+
 	// |                         |
-	// | Define a "Clear" colour |
-	// | Black in this case      |
-	// |                         |
-	// +-------------------------+
-	//              |
-
-	// // A structure for colour data
-	// type colour4 struct {
-	// 	r float32
-	// 	g float32
-	// 	b float32
-	// 	a float32
-	// }
-	// black := colour4{0, 0, 0, 1}
-
-	//              |
-	// +-------------------------+
-	// |                         |
 	// | Let's rotate the model  |
 	// | by omega (in radians)   |
 	// |                         |
 	// +-------------------------+
 	//              |
 
-	// Start at angle 0
-	angle := 0.0
-	// Rotate slow
-	omega := 0.02 * math.Pi
-	// GetTime returns the time elapsed since GLFW was started
-	// previousTime is used to calculate the time interval (dt) between frames
-	previousTime := glfw.GetTime()
-
 	gl.PointSize(2)
-
-	var primitivesToDraw int32 = 1
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.ClearColor(0, 0, 0, 1)
+
+	var primitivesToDraw int32 = 0
 
 	//              |
 	// +-------------------------+
@@ -496,7 +425,63 @@ func main() {
 	// +-------------------------+
 	//              |
 
+	angle := 0.0
+	omega := math.Pi / 16
+	previousTime := glfw.GetTime()
+
 	for !win.ShouldClose() {
+
+		if primitivesToDraw%int32(count) == 0 {
+			fmt.Println("Hello")
+			pos := vec3{0, 0, 0}
+			samplePoints[0] = pos
+			move := vec3{}
+
+			for i := 1; i < count; i++ {
+				rnd := rand.Intn(6)
+				switch rnd {
+				case 0:
+					move = vec3{-0.01, 0, 0}
+				case 1:
+					move = vec3{0.01, 0, 0}
+				case 2:
+					move = vec3{0, -0.01, 0}
+				case 3:
+					move = vec3{0, 0.01, 0}
+				case 4:
+					move = vec3{0, 0, -0.01}
+				case 5:
+					move = vec3{0, 0, 0.01}
+				default:
+					panic("unrecognized escape character")
+				}
+				//fmt.Println(move, start)
+				pos.x += move.x
+				pos.y += move.y
+				pos.z += move.z
+				samplePoints[i] = pos
+				// if i%2000 == 0 {
+				// 	pos = vec3{0, 0, 0}
+				// 	samplePoints[i] = pos
+				// } else {
+				// 	samplePoints[i] = pos
+				// }
+				//samplePoints[i] = vec3{rand.Float32()*2 - 1, rand.Float32()*2 - 1, rand.Float32()*2 - 1}
+			}
+
+			//              |
+			// +-------------------------+
+			// |                         |
+			// | Allocate memory on GPU  |
+			// | and copy the vertices   |
+			// | to that memory          |
+			// |                         |
+			// +-------------------------+
+			//              |
+
+			gl.BufferData(gl.ARRAY_BUFFER, int(unsafe.Sizeof(samplePoints)), unsafe.Pointer(&samplePoints), gl.STATIC_DRAW)
+
+		}
 
 		//              |
 		// +-------------------------+
@@ -530,7 +515,7 @@ func main() {
 		//              |
 
 		angle += omega * dt
-		model = mgl32.HomogRotate3D(float32(angle), mgl32.Vec3{0, 1, 0})
+		model = mgl32.HomogRotate3D(float32(angle), mgl32.Vec3{1, 1, 0})
 		gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
 
 		//              |
@@ -542,9 +527,13 @@ func main() {
 		//              |
 
 		//gl.DrawArrays(gl.POINTS, 0, int32(len(samplePoints)))
-		gl.DrawArrays(gl.POINTS, 0, int32(primitivesToDraw%int32(count)))
+		//gl.DrawArrays(gl.POINTS, 0, int32(primitivesToDraw%int32(count)))
+		//gl.DrawArrays(gl.LINES, 0, int32(primitivesToDraw%int32(count)))
+		gl.DrawArrays(gl.LINE_STRIP, 0, int32(primitivesToDraw%int32(count)))
+		//gl.DrawArrays(gl.TRIANGLES, 0, int32(primitivesToDraw%int32(count)))
+		//gl.DrawArrays(gl.TRIANGLE_FAN, 0, int32(primitivesToDraw%int32(count)))
 
-		primitivesToDraw++
+		primitivesToDraw += 2
 
 		//              |
 		// +-------------------------+
