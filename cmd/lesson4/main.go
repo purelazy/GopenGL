@@ -14,6 +14,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 )
 
+//go:generate echo createWindow
 func createWindow(title string, width, height int) *glfw.Window {
 
 	// Make sure width and height are not zero.
@@ -349,7 +350,7 @@ func main() {
 	//              |
 	// +-------------------------+
 	// |                         |
-	// |    Create some points   |
+	// |  Create some vertices   |
 	// |                         |
 	// +-------------------------+
 	//              |

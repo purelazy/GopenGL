@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"runtime"
 	"strings"
@@ -128,7 +129,7 @@ func main() {
 	// +-------------------------+
 	//              |
 
-	var windowWidth, windowHeight int = 800, 600
+	var windowWidth, windowHeight int = 1600, 1200
 	win := createWindow("Hello OpenGL in Go", windowWidth, windowHeight)
 
 	//              |
@@ -148,9 +149,20 @@ func main() {
 		uniform mat4 model;
 		
 		in vec3 vert;
+		out vec3 colour;
+		vec3 doNotDraw = vec3(1000.0, 0.0, 0.0);
 		
 		void main() {
-			gl_Position = projection * camera * model * vec4(vert, 1);
+			if (length(vert) < 1) {
+				gl_Position = projection * camera * model * vec4(vert, 1);
+				if (length(vert) < 0.7) gl_Position = vec4(doNotDraw, 1);
+				colour = vec3((-gl_Position.z+1.0)/2.0, 0.0, 0.0);
+			}
+			else {
+				//colour = vec3(0.0, 0.0, 0.9);
+				gl_Position = vec4(doNotDraw, 1);
+			}
+
 		}
 
 ` + "\x00"
@@ -158,11 +170,11 @@ func main() {
 	var fragmentShader = `
 		#version 430
 
+		in vec3 colour;
 		out vec4 outputColor;
 
 		void main() {
-			// This pixel is green
-			outputColor = vec4(0.0, 1.0, 0.0, 1.0);
+			outputColor = vec4(colour, 1.0);
 		}
 
 	` + "\x00"
@@ -191,15 +203,17 @@ func main() {
 	// +-------------------------+
 	//              |
 
-	// Field of View (along the Y axis)
-	fovy := mgl32.DegToRad(45.0)
-	// The aspect ratio
-	aspectRatio := float32(windowWidth) / float32(windowHeight)
-	// The near and far clipping distances
-	var nearClip float32 = 0.1
-	var farClip float32 = 10
-	// Perspective generates a Perspective Matrix.
-	projection := mgl32.Perspective(fovy, aspectRatio, nearClip, farClip)
+	// // Field of View (along the Y axis)
+	// fovy := mgl32.DegToRad(45.0)
+	// // The aspect ratio
+	// aspectRatio := float32(windowWidth) / float32(windowHeight)
+	// // The near and far clipping distances
+	// var nearClip float32 = 0.01
+	// var farClip float32 = 12
+	// // Perspective generates a Perspective Matrix.
+	// projection := mgl32.Perspective(fovy, aspectRatio, nearClip, farClip)
+
+	projection := mgl32.Ortho(-1, 1, -1, 1, 0, 2)
 
 	//              |
 	// +-------------------------+
@@ -222,7 +236,7 @@ func main() {
 	//              |
 
 	// This is where the camera is positioned
-	eye := mgl32.Vec3{3, 3, 3}
+	eye := mgl32.Vec3{0, 0, 1}
 	// This is the point at which the camera is looking
 	lookingAt := mgl32.Vec3{0, 0, 0}
 	// Up is in the positive Y direction
@@ -254,31 +268,6 @@ func main() {
 	model := mgl32.Ident4()
 	modelUniform := gl.GetUniformLocation(shader, gl.Str("model\x00"))
 	gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
-
-	//              |
-	// +-------------------------+
-	// |                         |
-	// |   Define 2 Triangles    |
-	// |   Requires 6 Vertices   |
-	// |                         |
-	// +-------------------------+
-	//              |
-
-	type vec2 struct {
-		x float32
-		y float32
-	}
-
-	var vertices = [...]vec2{
-		// Triangle 1
-		{-0.90, -0.90},
-		{0.85, -0.90},
-		{-0.90, 0.85},
-		// Triangle 2
-		{0.90, -0.85},
-		{0.90, 0.90},
-		{-0.85, 0.90},
-	}
 
 	//              |
 	// +-------------------------+
@@ -328,6 +317,27 @@ func main() {
 	//              |
 	// +-------------------------+
 	// |                         |
+	// |    Create some points   |
+	// |                         |
+	// +-------------------------+
+	//              |
+
+	type vec3 struct {
+		x float32
+		y float32
+		z float32
+	}
+
+	const count int = 10000
+	var samplePoints [count]vec3
+
+	for i := 0; i < count; i++ {
+		samplePoints[i] = vec3{rand.Float32()*2 - 1, rand.Float32()*2 - 1, rand.Float32()*2 - 1}
+	}
+
+	//              |
+	// +-------------------------+
+	// |                         |
 	// | Allocate memory on GPU  |
 	// | and copy the vertices   |
 	// | to that memory          |
@@ -335,7 +345,7 @@ func main() {
 	// +-------------------------+
 	//              |
 
-	gl.BufferData(gl.ARRAY_BUFFER, int(unsafe.Sizeof(vertices)), unsafe.Pointer(&vertices), gl.STATIC_DRAW)
+	gl.BufferData(gl.ARRAY_BUFFER, int(unsafe.Sizeof(samplePoints)), unsafe.Pointer(&samplePoints), gl.STATIC_DRAW)
 
 	//              |
 	// +-------------------------+
@@ -348,7 +358,7 @@ func main() {
 	//              |
 
 	var vPosition uint32 = 0
-	coordinatesPerVertex := int32(unsafe.Sizeof(vec2{})) / int32(unsafe.Sizeof(float32(0)))
+	coordinatesPerVertex := int32(unsafe.Sizeof(vec3{})) / int32(unsafe.Sizeof(float32(0)))
 	gl.VertexAttribPointer(vPosition, coordinatesPerVertex, gl.FLOAT, false, 0, gl.PtrOffset(0))
 
 	//              |
@@ -390,11 +400,15 @@ func main() {
 
 	// Start at angle 0
 	angle := 0.0
-	// Rotate at one revolution (2 * Pi radians) per second
-	omega := 2 * math.Pi
+	// Rotate slow
+	omega := 0.02 * math.Pi
 	// GetTime returns the time elapsed since GLFW was started
 	// previousTime is used to calculate the time interval (dt) between frames
 	previousTime := glfw.GetTime()
+
+	gl.PointSize(2)
+
+	var primitivesToDraw int32 = 2
 
 	//              |
 	// +-------------------------+
@@ -448,7 +462,9 @@ func main() {
 
 		// Specifie the first index in the enabled array.
 		const first int32 = 0
-		gl.DrawArrays(gl.TRIANGLES, first, int32(len(vertices)))
+		gl.DrawArrays(gl.POINTS, first, int32(len(samplePoints)))
+		//gl.DrawArrays(gl.POINTS, first, primitivesToDraw%int32(count))
+		primitivesToDraw++
 
 		//              |
 		// +-------------------------+
