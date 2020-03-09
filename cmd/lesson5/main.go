@@ -515,7 +515,7 @@ func main() {
 		//              |
 
 		angle += omega * dt
-		model = mgl32.HomogRotate3D(float32(angle), mgl32.Vec3{1, 1, 0})
+		model = mgl32.HomogRotate3D(float32(angle), mgl32.Vec3{0, 1, 0})
 		gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
 
 		//              |
@@ -533,7 +533,7 @@ func main() {
 		//gl.DrawArrays(gl.TRIANGLES, 0, int32(primitivesToDraw%int32(count)))
 		//gl.DrawArrays(gl.TRIANGLE_FAN, 0, int32(primitivesToDraw%int32(count)))
 
-		primitivesToDraw += 2
+		primitivesToDraw += 4
 
 		//              |
 		// +-------------------------+
