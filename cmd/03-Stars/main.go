@@ -243,7 +243,6 @@ func main() {
 	thisWayIsUp := mgl32.Vec3{0, 1, 0}
 	// LookAtV positions the camera based on these 3 things
 	camera := mgl32.LookAtV(eye, lookingAt, thisWayIsUp)
-	// glGetUniformLocation gets the location of a uniform within a program
 
 	//              |
 	// +-------------------------+
