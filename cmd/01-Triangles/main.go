@@ -18,7 +18,6 @@ func init() {
 }
 
 func createWindow(title string, width, height int) *glfw.Window {
-	fmt.Println("Window width, height: ", width, height)
 	if !(width != 0 && height != 0) {
 		fmt.Println("Width and Height cannot be zero.")
 		os.Exit(0)
@@ -50,7 +49,6 @@ func createWindow(title string, width, height int) *glfw.Window {
 }
 
 func compileShader(source string, shaderType uint32) (uint32, error) {
-	fmt.Println("compileShader")
 	shader := gl.CreateShader(shaderType)
 
 	csources, free := gl.Strs(source)
@@ -118,8 +116,25 @@ func createShader(vertexShaderSource, fragmentShaderSource string) (uint32, erro
 }
 
 func main() {
-	fmt.Println("Main")
-	fmt.Println("Define Vertices")
+
+	//              |
+	// +-------------------------+
+	// |                         |
+	// |        Window           |
+	// |                         |
+	// +-------------------------+
+	//              |
+
+	var windowWidth, windowHeight int = 800, 600
+	win := createWindow("Hello OpenGL in Go", windowWidth, windowHeight)
+
+	//              |
+	// +-------------------------+
+	// |                         |
+	// |        Vertices         |
+	// |                         |
+	// +-------------------------+
+	//              |
 
 	type vec2 struct {
 		x float32
@@ -137,11 +152,14 @@ func main() {
 		{-0.85, 0.90},
 	}
 
-	fmt.Println("Create the Window")
-	var windowWidth, windowHeight int = 800, 600
-	win := createWindow("Hello OpenGL in Go", windowWidth, windowHeight)
+	//              |
+	// +-------------------------+
+	// |                         |
+	// |         Shader          |
+	// |                         |
+	// +-------------------------+
+	//              |
 
-	// Vertex Shader
 	var vertexShader = `
 		#version 430 core
 
@@ -174,7 +192,29 @@ func main() {
 	defer gl.DeleteProgram(program)
 	gl.UseProgram(program)
 
-	fmt.Println("Create and Bind the VAO")
+	//              |
+	// +-------------------------+
+	// |                         |
+	// |      Vertex Array       |
+	// |                         |
+	// +-------------------------+
+	//              |
+
+	var oneBuffer int32 = 1
+	var theArrayBuffer uint32
+
+	gl.GenBuffers(oneBuffer, &theArrayBuffer)
+	gl.BindBuffer(gl.ARRAY_BUFFER, theArrayBuffer)
+	gl.BufferData(gl.ARRAY_BUFFER, int(unsafe.Sizeof(vertices)), unsafe.Pointer(&vertices), gl.STATIC_DRAW)
+
+	//              |
+	// +-------------------------+
+	// |                         |
+	// |      Vertex Array       |
+	// |      Description        |
+	// |                         |
+	// +-------------------------+
+	//              |
 
 	var oneVAO int32 = 1
 	var theVAO uint32
@@ -182,26 +222,14 @@ func main() {
 	gl.GenVertexArrays(oneVAO, &theVAO)
 	gl.BindVertexArray(theVAO)
 
-	fmt.Println("Create and Bind the Array Buffer")
-
-	var oneBuffer int32 = 1
-	var theArrayBuffer uint32
-
-	gl.GenBuffers(oneBuffer, &theArrayBuffer)
-	gl.BindBuffer(gl.ARRAY_BUFFER, theArrayBuffer)
-
-	fmt.Println("Copy data to the Array Buffer")
-	gl.BufferData(gl.ARRAY_BUFFER, int(unsafe.Sizeof(vertices)), unsafe.Pointer(&vertices), gl.STATIC_DRAW)
-
-	fmt.Println("Describe the data")
-	var position uint32 = 0
 	coordinatesPerVertex := int32(unsafe.Sizeof(vec2{})) / int32(unsafe.Sizeof(float32(0)))
+	position := uint32(gl.GetAttribLocation(program, gl.Str("position\x00")))
 	gl.VertexAttribPointer(position, coordinatesPerVertex, gl.FLOAT, false, 0, gl.PtrOffset(0))
 
-	fmt.Println("Use the data")
+	// Enable this attribute in the shader
 	gl.EnableVertexAttribArray(position)
 
-	fmt.Println("Set a background colour")
+	// Background colour
 	type vec4 struct {
 		r float32
 		g float32
@@ -210,16 +238,23 @@ func main() {
 	}
 	black := vec4{0, 0, 0, 1}
 
-	fmt.Println("Clear the screen and draw the triangles")
+	// Clear screen
 	const drawbuffer int32 = 0
 	gl.ClearBufferfv(gl.COLOR, drawbuffer, &black.r)
 
+	//              |
+	// +-------------------------+
+	// |                         |
+	// |          Draw           |
+	// |                         |
+	// +-------------------------+
+	//              |
+
 	const first int32 = 0
 	gl.DrawArrays(gl.TRIANGLES, first, int32(len(vertices)))
-
 	win.SwapBuffers()
 
-	fmt.Println("Wait for the Close window click")
+	// Poll for window close
 	for !win.ShouldClose() {
 		glfw.PollEvents()
 	}
