@@ -1,8 +1,10 @@
 package main
 
+// /home/andre/go/src/GopenGL/cmd/01-Triangles/main.go
+
 import (
 	"fmt"
-
+	"os"
 	"runtime"
 	"strings"
 	"unsafe"
@@ -11,9 +13,16 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 )
 
-func createWindow(title string, width, height int) *glfw.Window {
-
+func init() {
 	runtime.LockOSThread()
+}
+
+func createWindow(title string, width, height int) *glfw.Window {
+	fmt.Println("Window width, height: ", width, height)
+	if !(width != 0 && height != 0) {
+		fmt.Println("Width and Height cannot be zero.")
+		os.Exit(0)
+	}
 
 	if err := glfw.Init(); err != nil {
 		panic(fmt.Errorf("could not initialize glfw: %v", err))
@@ -70,7 +79,6 @@ func compileShader(source string, shaderType uint32) (uint32, error) {
 }
 
 func createShader(vertexShaderSource, fragmentShaderSource string) (uint32, error) {
-
 	vertexShader, err := compileShader(vertexShaderSource, gl.VERTEX_SHADER)
 	if err != nil {
 		fmt.Println("Vertex shader did not compile")
@@ -111,13 +119,14 @@ func createShader(vertexShaderSource, fragmentShaderSource string) (uint32, erro
 
 func main() {
 	fmt.Println("Main")
-
 	fmt.Println("Define Vertices")
 
-	const numberOfVertices int32 = 6
-	// The number of components per vertex attribute, X and Y
-	const coordinatesPerVertex int32 = 2
-	var vertices = [numberOfVertices][coordinatesPerVertex]float32{
+	type vec2 struct {
+		x float32
+		y float32
+	}
+
+	var vertices = [...]vec2{
 		// Triangle 1
 		{-0.90, -0.90},
 		{0.85, -0.90},
@@ -129,23 +138,22 @@ func main() {
 	}
 
 	fmt.Println("Create the Window")
-	const windowWidth int = 800
-	const windowHeight int = 600
+	var windowWidth, windowHeight int = 800, 600
 	win := createWindow("Hello OpenGL in Go", windowWidth, windowHeight)
 
-	fmt.Println("Here is the vertexShader code")
+	// Vertex Shader
 	var vertexShader = `
 		#version 430 core
 
-		layout (location = 0) in vec4 vPosition;
+		layout (location = 0) in vec4 position;
 
 		void main()
 		{
-			gl_Position = vPosition;
+			gl_Position = position;
 		}
 ` + "\x00"
 
-	fmt.Println("Here is the fragmentShader code")
+	// Fragment Shader
 	var fragmentShader = `
 		#version 430 core
 
@@ -158,14 +166,12 @@ func main() {
 		}
 	` + "\x00"
 
-	fmt.Println("Here we create the Shader program")
+	// Compile, link and load the shader program
 	program, err := createShader(vertexShader, fragmentShader)
 	if err != nil {
 		panic(err)
 	}
 	defer gl.DeleteProgram(program)
-
-	fmt.Println("Use the shader program")
 	gl.UseProgram(program)
 
 	fmt.Println("Create and Bind the VAO")
@@ -188,11 +194,12 @@ func main() {
 	gl.BufferData(gl.ARRAY_BUFFER, int(unsafe.Sizeof(vertices)), unsafe.Pointer(&vertices), gl.STATIC_DRAW)
 
 	fmt.Println("Describe the data")
-	var vPosition uint32 = 0
-	gl.VertexAttribPointer(vPosition, coordinatesPerVertex, gl.FLOAT, false, 0, gl.PtrOffset(0))
+	var position uint32 = 0
+	coordinatesPerVertex := int32(unsafe.Sizeof(vec2{})) / int32(unsafe.Sizeof(float32(0)))
+	gl.VertexAttribPointer(position, coordinatesPerVertex, gl.FLOAT, false, 0, gl.PtrOffset(0))
 
 	fmt.Println("Use the data")
-	gl.EnableVertexAttribArray(vPosition)
+	gl.EnableVertexAttribArray(position)
 
 	fmt.Println("Set a background colour")
 	type vec4 struct {
@@ -208,7 +215,7 @@ func main() {
 	gl.ClearBufferfv(gl.COLOR, drawbuffer, &black.r)
 
 	const first int32 = 0
-	gl.DrawArrays(gl.TRIANGLES, first, numberOfVertices)
+	gl.DrawArrays(gl.TRIANGLES, first, int32(len(vertices)))
 
 	win.SwapBuffers()
 
